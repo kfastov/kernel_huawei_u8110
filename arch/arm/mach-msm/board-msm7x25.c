@@ -309,6 +309,43 @@ static struct msm_hsusb_platform_data msm_hsusb_pdata = {
 	.config_gpio    = NULL,
 #endif
 };
+
+///fastix-usbhost
+#ifdef CONFIG_USB_MSM_OTG_72K
+static int hsusb_rpc_connect(int connect)
+{
+	if (connect)
+		return msm_hsusb_rpc_connect();
+	else
+		return msm_hsusb_rpc_close();
+}
+#endif
+
+#if defined(CONFIG_USB_MSM_OTG_72K) || defined(CONFIG_USB_EHCI_MSM) || defined(CONFIG_USB_EHCI_MSM7201)
+static int msm_hsusb_rpc_phy_reset(void __iomem *addr)
+{
+	return msm_hsusb_phy_reset();
+}
+#endif
+
+#ifdef CONFIG_USB_MSM_OTG_72K
+static struct msm_otg_platform_data msm_otg_pdata = {
+	.rpc_connect	= hsusb_rpc_connect,
+	.phy_reset	= msm_hsusb_rpc_phy_reset, ///warning at make
+	///fastix - will try to port otg stuff later
+	///.pmic_notif_init         = msm_pm_app_rpc_init,
+	///.pmic_notif_deinit       = msm_pm_app_rpc_deinit,
+	///.pmic_register_vbus_sn   = msm_pm_app_register_vbus_sn,
+	///.pmic_unregister_vbus_sn = msm_pm_app_unregister_vbus_sn,
+	///.pmic_enable_ldo         = msm_pm_app_enable_usb_ldo,
+};
+
+///#ifdef CONFIG_USB_GADGET
+///static struct msm_hsusb_gadget_platform_data msm_gadget_pdata;
+///#endif
+#endif
+///end of fastix-usbhost
+
 static struct msm_hsusb_platform_data msm_hsusb_tmo_pdata = {
 #ifdef CONFIG_USB_FUNCTION
 	.version	= 0x0100,
@@ -1528,6 +1565,31 @@ static struct msm_acpu_clock_platform_data msm7x2x_clock_data = {
 void msm_serial_debug_init(unsigned int base, int irq,
 			   struct device *clk_device, int signal_irq);
 
+///fastix-usbhost
+#if defined(CONFIG_USB_EHCI_MSM) || defined(CONFIG_USB_EHCI_MSM7201)
+static void msm_hsusb_vbus_power(unsigned phy_info, int on)
+{
+	if (on)
+		msm_hsusb_vbus_powerup();
+	else
+		msm_hsusb_vbus_shutdown();
+}
+
+static struct msm_usb_host_platform_data msm_usb_host_pdata = {
+	.phy_info       = (USB_PHY_INTEGRATED | USB_PHY_MODEL_65NM),
+	.phy_reset = msm_hsusb_rpc_phy_reset,
+	.vbus_power = msm_hsusb_vbus_power,
+};
+static void __init msm7x2x_init_host(void)
+{
+	if (machine_is_msm7x25_ffa() || machine_is_msm7x27_ffa())
+		return;
+
+	msm_add_host(0, &msm_usb_host_pdata);
+}
+#endif
+//end of fastix-usbhost
+
 #ifdef CONFIG_MMC
 static void sdcc_gpio_init(void)
 {
@@ -1910,6 +1972,8 @@ static void __init msm7x2x_init(void)
     proc_usb_para();
 #endif  /* #ifdef CONFIG_USB_AUTO_INSTALL */
 
+/*fastix-usbhost*/
+#ifdef CONFIG_USB_FUNCTION
     if(&usb_pid_array[1] == curr_usb_pid_ptr)
     {
         msm_device_hsusb_peripheral.dev.platform_data = &msm_hsusb_tmo_pdata;
@@ -1924,6 +1988,7 @@ static void __init msm7x2x_init(void)
     {
         set_usb_sn(USB_SN_STRING);
     }
+#endif /*fastix-usbhost*/
 
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
@@ -1959,6 +2024,11 @@ static void __init msm7x2x_init(void)
 		platform_device_register(&keypad_device_c8600); 
 #endif
 	lcdc_gpio_init();
+///fastix-usbhost
+#if defined(CONFIG_USB_EHCI_MSM) || defined(CONFIG_USB_EHCI_MSM7201)
+	msm7x2x_init_host();
+#endif
+///end of fastix-usbhost
 #ifdef CONFIG_HUAWEI_JOGBALL
 	if (machine_is_msm7x25_c8600())
 	{
